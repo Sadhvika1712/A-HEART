@@ -1,0 +1,320 @@
+import React, { useState } from 'react';
+import { base44 } from '@/api/base44Client';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Download, FileText, FileSpreadsheet, Users, HandHelping, Package, AlertTriangle } from 'lucide-react';
+import { toast } from 'sonner';
+
+// ── CSV helpers ──────────────────────────────────────────────────────────────
+function toCSV(rows, headers) {
+  const escape = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const header = headers.map(h => escape(h.label)).join(',');
+  const body = rows.map(r => headers.map(h => escape(r[h.key])).join(',')).join('\n');
+  return `${header}\n${body}`;
+}
+
+function downloadFile(content, filename, type) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── Simple HTML→PDF via window.print ────────────────────────────────────────
+function printPDF(title, html) {
+  const win = window.open('', '_blank');
+  win.document.write(`<!DOCTYPE html><html><head>
+    <title>${title}</title>
+    <style>
+      body{font-family:Inter,sans-serif;padding:32px;color:#111}
+      h1{font-size:22px;margin-bottom:4px}
+      p.sub{color:#666;font-size:13px;margin-bottom:24px}
+      table{width:100%;border-collapse:collapse;font-size:12px}
+      th{background:#f3f4f6;padding:8px 10px;text-align:left;border-bottom:2px solid #e5e7eb}
+      td{padding:7px 10px;border-bottom:1px solid #f3f4f6}
+      tr:nth-child(even)td{background:#fafafa}
+      .badge{display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600}
+      .approved{background:#d1fae5;color:#065f46}
+      .pending{background:#fef9c3;color:#854d0e}
+      .blocked{background:#fee2e2;color:#991b1b}
+      @media print{body{padding:0}}
+    </style>
+  </head><body>${html}<script>window.onload=()=>{window.print();window.close()}<\/script></body></html>`);
+  win.document.close();
+}
+
+const statusClass = s => s === 'approved' ? 'approved' : s === 'blocked' ? 'blocked' : 'pending';
+
+export default function DataDownload({ adminUser }) {
+  const [loading, setLoading] = useState('');
+
+  const logDownload = async (type) => {
+    await base44.entities.AuditLog.create({
+      action: 'data_download',
+      performed_by_email: adminUser?.email,
+      performed_by_name: adminUser?.full_name,
+      details: `Downloaded ${type} data`,
+    });
+  };
+
+  // ── USER DATA ──────────────────────────────────────────────────────────────
+  const userHeaders = [
+    { key: 'full_name', label: 'Full Name' },
+    { key: 'email', label: 'Email' },
+    { key: 'phone', label: 'Phone' },
+    { key: 'location', label: 'Location' },
+    { key: 'skillsStr', label: 'Skills' },
+    { key: 'available_resources', label: 'Resources' },
+    { key: 'approval_status', label: 'Status' },
+    { key: 'trust_score', label: 'Trust Score' },
+    { key: 'total_ratings', label: 'Total Ratings' },
+    { key: 'is_flagged', label: 'Flagged' },
+    { key: 'created_date', label: 'Joined' },
+  ];
+
+  const fetchUsers = async () => {
+    const users = await base44.entities.User.list();
+    return users.map(u => ({ ...u, skillsStr: (u.skills || []).join(', ') }));
+  };
+
+  const downloadUsersCSV = async () => {
+    setLoading('users-csv');
+    const users = await fetchUsers();
+    downloadFile(toCSV(users, userHeaders), 'aheart_users.csv', 'text/csv');
+    await logDownload('users (CSV)');
+    setLoading(''); toast.success('User data downloaded (CSV)');
+  };
+
+  const downloadUsersPDF = async () => {
+    setLoading('users-pdf');
+    const users = await fetchUsers();
+    const rows = users.map(u => `<tr>
+      <td>${u.full_name || ''}</td><td>${u.email}</td><td>${u.phone || '—'}</td>
+      <td>${u.location || '—'}</td><td>${u.skillsStr || '—'}</td>
+      <td><span class="badge ${statusClass(u.approval_status)}">${u.approval_status || 'pending'}</span></td>
+      <td>${(u.trust_score || 3).toFixed(1)}</td>
+    </tr>`).join('');
+    printPDF('A-HEART — User Report', `
+      <h1>A-HEART Community — User Report</h1>
+      <p class="sub">Generated: ${new Date().toLocaleString()} · Admin: ${adminUser?.email}</p>
+      <table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Location</th><th>Skills</th><th>Status</th><th>Trust</th></tr></thead>
+      <tbody>${rows}</tbody></table>`);
+    await logDownload('users (PDF)');
+    setLoading(''); toast.success('User report opened for printing/PDF');
+  };
+
+  // ── HELP REQUESTS ──────────────────────────────────────────────────────────
+  const requestHeaders = [
+    { key: 'title', label: 'Title' },
+    { key: 'requester_name', label: 'Requester' },
+    { key: 'requester_email', label: 'Requester Email' },
+    { key: 'category', label: 'Category' },
+    { key: 'urgency', label: 'Urgency' },
+    { key: 'status', label: 'Status' },
+    { key: 'assigned_helper_name', label: 'Helper' },
+    { key: 'assigned_helper_email', label: 'Helper Email' },
+    { key: 'location', label: 'Location' },
+    { key: 'match_reason', label: 'Match Reason' },
+    { key: 'completed_date', label: 'Completed Date' },
+    { key: 'created_date', label: 'Created' },
+  ];
+
+  const downloadRequestsCSV = async () => {
+    setLoading('req-csv');
+    const requests = await base44.entities.HelpRequest.list('-created_date', 1000);
+    downloadFile(toCSV(requests, requestHeaders), 'aheart_requests.csv', 'text/csv');
+    await logDownload('help requests (CSV)');
+    setLoading(''); toast.success('Help request data downloaded (CSV)');
+  };
+
+  const downloadRequestsPDF = async () => {
+    setLoading('req-pdf');
+    const requests = await base44.entities.HelpRequest.list('-created_date', 1000);
+    const rows = requests.map(r => `<tr>
+      <td>${r.title}</td><td>${r.requester_name || ''}</td><td>${r.category}</td>
+      <td>${r.urgency}</td><td>${r.status}</td><td>${r.assigned_helper_name || '—'}</td>
+      <td>${r.location || '—'}</td><td>${r.created_date ? new Date(r.created_date).toLocaleDateString() : ''}</td>
+    </tr>`).join('');
+    printPDF('A-HEART — Help Requests Report', `
+      <h1>A-HEART — Help Requests Report</h1>
+      <p class="sub">Generated: ${new Date().toLocaleString()} · Admin: ${adminUser?.email}</p>
+      <table><thead><tr><th>Title</th><th>Requester</th><th>Category</th><th>Urgency</th><th>Status</th><th>Helper</th><th>Location</th><th>Date</th></tr></thead>
+      <tbody>${rows}</tbody></table>`);
+    await logDownload('help requests (PDF)');
+    setLoading(''); toast.success('Help requests report opened for printing/PDF');
+  };
+
+  // ── RESOURCES ──────────────────────────────────────────────────────────────
+  const resourceHeaders = [
+    { key: 'name', label: 'Resource' },
+    { key: 'category', label: 'Category' },
+    { key: 'owner_name', label: 'Owner' },
+    { key: 'owner_email', label: 'Owner Email' },
+    { key: 'status', label: 'Status' },
+    { key: 'borrower_name', label: 'Borrower' },
+    { key: 'borrower_email', label: 'Borrower Email' },
+    { key: 'borrow_date', label: 'Borrow Date' },
+    { key: 'return_date', label: 'Return Date' },
+    { key: 'condition_on_return', label: 'Return Condition' },
+    { key: 'location', label: 'Location' },
+  ];
+
+  const downloadResourcesCSV = async () => {
+    setLoading('res-csv');
+    const resources = await base44.entities.Resource.list('-created_date', 1000);
+    downloadFile(toCSV(resources, resourceHeaders), 'aheart_resources.csv', 'text/csv');
+    await logDownload('resources (CSV)');
+    setLoading(''); toast.success('Resource data downloaded (CSV)');
+  };
+
+  const downloadResourcesPDF = async () => {
+    setLoading('res-pdf');
+    const resources = await base44.entities.Resource.list('-created_date', 1000);
+    const rows = resources.map(r => `<tr>
+      <td>${r.name}</td><td>${r.category}</td><td>${r.owner_name || ''}</td>
+      <td>${r.status}</td><td>${r.borrower_name || '—'}</td>
+      <td>${r.borrow_date ? new Date(r.borrow_date).toLocaleDateString() : '—'}</td>
+      <td>${r.condition_on_return || '—'}</td>
+    </tr>`).join('');
+    printPDF('A-HEART — Resource Report', `
+      <h1>A-HEART — Resource Report</h1>
+      <p class="sub">Generated: ${new Date().toLocaleString()} · Admin: ${adminUser?.email}</p>
+      <table><thead><tr><th>Resource</th><th>Category</th><th>Owner</th><th>Status</th><th>Borrower</th><th>Borrow Date</th><th>Return Condition</th></tr></thead>
+      <tbody>${rows}</tbody></table>`);
+    await logDownload('resources (PDF)');
+    setLoading(''); toast.success('Resource report opened for printing/PDF');
+  };
+
+  // ── RATINGS ────────────────────────────────────────────────────────────────
+  const downloadRatingsCSV = async () => {
+    setLoading('rat-csv');
+    const ratings = await base44.entities.Rating.list('-created_date', 1000);
+    const headers = [
+      { key: 'rating_type', label: 'Type' },
+      { key: 'rater_name', label: 'Rater' },
+      { key: 'rater_email', label: 'Rater Email' },
+      { key: 'rated_name', label: 'Rated' },
+      { key: 'rated_email', label: 'Rated Email' },
+      { key: 'score', label: 'Score' },
+      { key: 'feedback', label: 'Feedback' },
+      { key: 'created_date', label: 'Date' },
+    ];
+    downloadFile(toCSV(ratings, headers), 'aheart_ratings.csv', 'text/csv');
+    await logDownload('ratings (CSV)');
+    setLoading(''); toast.success('Ratings data downloaded (CSV)');
+  };
+
+  // ── AUDIT LOG ──────────────────────────────────────────────────────────────
+  const downloadAuditCSV = async () => {
+    setLoading('audit-csv');
+    const logs = await base44.entities.AuditLog.list('-created_date', 1000);
+    const headers = [
+      { key: 'action', label: 'Action' },
+      { key: 'performed_by_name', label: 'Performed By' },
+      { key: 'performed_by_email', label: 'Admin Email' },
+      { key: 'target_email', label: 'Target' },
+      { key: 'details', label: 'Details' },
+      { key: 'created_date', label: 'Timestamp' },
+    ];
+    downloadFile(toCSV(logs, headers), 'aheart_audit_log.csv', 'text/csv');
+    setLoading(''); toast.success('Audit log downloaded');
+  };
+
+  const datasets = [
+    {
+      id: 'users',
+      icon: Users,
+      title: 'User Data',
+      desc: 'Names, emails, phones, locations, skills, status, trust scores',
+      actions: [
+        { label: 'CSV', key: 'users-csv', fn: downloadUsersCSV, icon: FileSpreadsheet },
+        { label: 'PDF', key: 'users-pdf', fn: downloadUsersPDF, icon: FileText },
+      ],
+    },
+    {
+      id: 'requests',
+      icon: HandHelping,
+      title: 'Help Requests',
+      desc: 'Request history, assignments, statuses, match reasons, timestamps',
+      actions: [
+        { label: 'CSV', key: 'req-csv', fn: downloadRequestsCSV, icon: FileSpreadsheet },
+        { label: 'PDF', key: 'req-pdf', fn: downloadRequestsPDF, icon: FileText },
+      ],
+    },
+    {
+      id: 'resources',
+      icon: Package,
+      title: 'Resource Data',
+      desc: 'Resource borrowing history, conditions, return dates, owners',
+      actions: [
+        { label: 'CSV', key: 'res-csv', fn: downloadResourcesCSV, icon: FileSpreadsheet },
+        { label: 'PDF', key: 'res-pdf', fn: downloadResourcesPDF, icon: FileText },
+      ],
+    },
+    {
+      id: 'ratings',
+      icon: AlertTriangle,
+      title: 'Ratings & Feedback',
+      desc: 'All mutual ratings, scores, and written feedback',
+      actions: [
+        { label: 'CSV', key: 'rat-csv', fn: downloadRatingsCSV, icon: FileSpreadsheet },
+      ],
+    },
+    {
+      id: 'audit',
+      icon: AlertTriangle,
+      title: 'Audit Log',
+      desc: 'All admin actions including downloads, approvals, and blocks',
+      actions: [
+        { label: 'CSV', key: 'audit-csv', fn: downloadAuditCSV, icon: FileSpreadsheet },
+      ],
+    },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 mb-2">
+        <Download className="w-5 h-5 text-primary" />
+        <h3 className="text-lg font-semibold">Data Export Center</h3>
+        <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/30 text-xs">Admin Only</Badge>
+      </div>
+      <p className="text-sm text-muted-foreground">All downloads are logged in the audit trail for compliance.</p>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {datasets.map(ds => (
+          <Card key={ds.id} className="p-5">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="p-2 rounded-lg bg-primary/10">
+                <ds.icon className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <p className="font-semibold text-sm">{ds.title}</p>
+                <p className="text-xs text-muted-foreground">{ds.desc}</p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              {ds.actions.map(act => (
+                <Button
+                  key={act.key}
+                  size="sm"
+                  variant="outline"
+                  disabled={loading === act.key}
+                  onClick={act.fn}
+                  className="flex items-center gap-1"
+                >
+                  {loading === act.key ? (
+                    <div className="w-4 h-4 border-2 border-muted border-t-primary rounded-full animate-spin" />
+                  ) : (
+                    <act.icon className="w-4 h-4" />
+                  )}
+                  {act.label}
+                </Button>
+              ))}
+            </div>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}

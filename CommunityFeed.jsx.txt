@@ -1,0 +1,74 @@
+import React from 'react';
+import { Card } from '@/components/ui/card';
+import { HandHelping, Package, Star, CheckCircle } from 'lucide-react';
+import moment from 'moment';
+
+const eventIcon = (type) => {
+  if (type === 'completed') return <CheckCircle className="w-4 h-4 text-accent" />;
+  if (type === 'resource') return <Package className="w-4 h-4 text-chart-3" />;
+  if (type === 'rating') return <Star className="w-4 h-4 text-primary" />;
+  return <HandHelping className="w-4 h-4 text-chart-3" />;
+};
+
+export default function CommunityFeed({ requests = [], resources = [] }) {
+  const events = [
+    ...requests
+      .filter(r => r.status === 'completed')
+      .map(r => ({
+        id: r.id,
+        type: 'completed',
+        text: `${r.assigned_helper_name || 'A helper'} helped ${r.requester_name || 'someone'} with "${r.title}"`,
+        date: r.completed_date || r.updated_date,
+      })),
+    ...requests
+      .filter(r => r.status === 'assigned' && r.assigned_helper_name)
+      .map(r => ({
+        id: r.id + '-a',
+        type: 'assigned',
+        text: `${r.assigned_helper_name} accepted to help with "${r.title}"`,
+        date: r.updated_date,
+      })),
+    ...resources
+      .filter(r => r.status === 'borrowed' && r.borrower_name)
+      .map(r => ({
+        id: r.id + '-b',
+        type: 'resource',
+        text: `${r.borrower_name} borrowed "${r.name}" from ${r.owner_name}`,
+        date: r.borrow_date || r.updated_date,
+      })),
+  ]
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .slice(0, 8);
+
+  if (events.length === 0) {
+    return (
+      <Card className="p-6">
+        <h3 className="font-semibold mb-3 flex items-center gap-2">
+          <HandHelping className="w-5 h-5 text-primary" />Community Activity
+        </h3>
+        <p className="text-sm text-muted-foreground text-center py-6">No community activity yet. Be the first to help!</p>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="p-6">
+      <h3 className="font-semibold mb-4 flex items-center gap-2">
+        <HandHelping className="w-5 h-5 text-primary" />Community Activity
+      </h3>
+      <div className="space-y-3">
+        {events.map(ev => (
+          <div key={ev.id} className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0 mt-0.5">
+              {eventIcon(ev.type)}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-foreground">{ev.text}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{moment(ev.date).fromNow()}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}

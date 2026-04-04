@@ -1,0 +1,101 @@
+{
+  "name": "Resource",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "tool",
+        "equipment",
+        "material",
+        "book",
+        "other"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "available",
+        "requested",
+        "borrowed",
+        "returned"
+      ],
+      "default": "available"
+    },
+    "owner_email": {
+      "type": "string"
+    },
+    "owner_name": {
+      "type": "string"
+    },
+    "borrower_email": {
+      "type": "string"
+    },
+    "borrower_name": {
+      "type": "string"
+    },
+    "location": {
+      "type": "string"
+    },
+    "borrow_date": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "return_date": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "condition_on_return": {
+      "type": "string",
+      "enum": [
+        "excellent",
+        "good",
+        "fair",
+        "damaged"
+      ],
+      "description": "Condition reported on return"
+    },
+    "owner_rated_borrower": {
+      "type": "boolean",
+      "default": false
+    },
+    "borrower_rated_owner": {
+      "type": "boolean",
+      "default": false
+    },
+    "borrow_history": {
+      "type": "array",
+      "description": "Full history of borrow events",
+      "items": {
+        "type": "object",
+        "properties": {
+          "borrower_email": {
+            "type": "string"
+          },
+          "borrower_name": {
+            "type": "string"
+          },
+          "borrow_date": {
+            "type": "string"
+          },
+          "return_date": {
+            "type": "string"
+          },
+          "condition": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "name",
+    "category"
+  ]
+}

@@ -1,0 +1,66 @@
+import React, { useState, useEffect } from 'react';
+import { Outlet } from 'react-router-dom';
+import { base44 } from '@/api/base44Client';
+import { useQuery } from '@tanstack/react-query';
+import Sidebar from './Sidebar';
+import PendingApproval from '@/pages/PendingApproval';
+
+export default function AppLayout() {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    base44.auth.me().then(u => {
+      setUser(u);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, []);
+
+  const { data: notifications = [] } = useQuery({
+    queryKey: ['unreadNotifications', user?.email],
+    queryFn: () => base44.entities.Notification.filter({ user_email: user.email, read: false }),
+    enabled: !!user?.email,
+  });
+
+  // For admin: count pending users
+  const { data: pendingUsers = [] } = useQuery({
+    queryKey: ['pendingUsers'],
+    queryFn: () => base44.entities.User.filter({ approval_status: 'pending_approval' }),
+    enabled: user?.role === 'admin',
+  });
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-4 border-muted border-t-primary rounded-full animate-spin" />
+          <p className="text-sm text-muted-foreground font-medium">Loading A-HEART...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Admin always has full access regardless of approval_status
+  const isAdmin = user?.role === 'admin';
+  const approvalStatus = user?.approval_status;
+
+  // Gate non-admin users by approval status
+  if (!isAdmin && approvalStatus !== 'approved') {
+    return <PendingApproval status={approvalStatus || 'pending_approval'} user={user} />;
+  }
+
+  return (
+    <div className="min-h-screen bg-background font-inter">
+      <Sidebar
+        user={user}
+        unreadCount={notifications.length}
+        pendingCount={pendingUsers.length}
+      />
+      <main className="lg:ml-64 min-h-screen transition-all duration-300">
+        <div className="p-4 pt-16 lg:pt-6 lg:p-8 max-w-7xl mx-auto">
+          <Outlet context={{ user }} />
+        </div>
+      </main>
+    </div>
+  );
+}

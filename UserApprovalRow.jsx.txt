@@ -1,0 +1,123 @@
+import React, { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { CheckCircle, XCircle, Ban, ChevronDown, ChevronUp, Phone, MapPin, Wrench } from 'lucide-react';
+import TrustScore from '@/components/shared/TrustScore';
+
+const statusColors = {
+  approved: 'bg-accent/10 text-accent border-accent/30',
+  pending_approval: 'bg-chart-4/10 text-chart-4 border-chart-4/30',
+  rejected: 'bg-destructive/10 text-destructive border-destructive/30',
+  blocked: 'bg-destructive/10 text-destructive border-destructive/30',
+};
+
+export default function UserApprovalRow({ user, onApprove, onReject, onBlock, onUnblock }) {
+  const [expanded, setExpanded] = useState(false);
+  const [rejectDialog, setRejectDialog] = useState(false);
+  const [reason, setReason] = useState('');
+
+  const handleReject = () => {
+    onReject(user, reason);
+    setRejectDialog(false);
+    setReason('');
+  };
+
+  return (
+    <>
+      <div className="border border-border rounded-xl p-4 bg-card hover:shadow-sm transition-shadow">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+              <span className="font-bold text-primary text-sm">{(user.full_name || 'U')[0].toUpperCase()}</span>
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="font-semibold text-sm truncate">{user.full_name}</p>
+                {user.is_flagged && <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/30 text-xs">⚠ Flagged</Badge>}
+                <Badge variant="outline" className={`text-xs capitalize ${statusColors[user.approval_status] || ''}`}>
+                  {(user.approval_status || 'pending').replace(/_/g, ' ')}
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <TrustScore score={user.trust_score} size="sm" />
+            <button onClick={() => setExpanded(!expanded)} className="p-1 text-muted-foreground hover:text-foreground">
+              {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+
+        {/* Expanded details */}
+        {expanded && (
+          <div className="mt-4 pt-4 border-t border-border space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+              {user.phone && <div className="flex items-center gap-2 text-muted-foreground"><Phone className="w-3.5 h-3.5" />{user.phone}</div>}
+              {user.location && <div className="flex items-center gap-2 text-muted-foreground"><MapPin className="w-3.5 h-3.5" />{user.location}</div>}
+              {user.skills?.length > 0 && (
+                <div className="flex items-start gap-2 text-muted-foreground sm:col-span-2">
+                  <Wrench className="w-3.5 h-3.5 mt-0.5" />
+                  <span>{user.skills.join(', ')}</span>
+                </div>
+              )}
+              {user.available_resources && (
+                <div className="sm:col-span-2 text-muted-foreground text-xs bg-muted/50 rounded-lg p-2">
+                  Resources: {user.available_resources}
+                </div>
+              )}
+              {user.rejection_reason && (
+                <div className="sm:col-span-2 text-destructive text-xs bg-destructive/5 rounded-lg p-2">
+                  Reason: {user.rejection_reason}
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-2 flex-wrap pt-1">
+              {user.approval_status !== 'approved' && (
+                <Button size="sm" className="bg-accent hover:bg-accent/90" onClick={() => onApprove(user)}>
+                  <CheckCircle className="w-4 h-4 mr-1" />Approve
+                </Button>
+              )}
+              {user.approval_status !== 'rejected' && user.approval_status !== 'blocked' && (
+                <Button size="sm" variant="outline" className="text-destructive border-destructive/30" onClick={() => setRejectDialog(true)}>
+                  <XCircle className="w-4 h-4 mr-1" />Reject
+                </Button>
+              )}
+              {user.approval_status !== 'blocked' && (
+                <Button size="sm" variant="outline" className="text-destructive border-destructive/30" onClick={() => onBlock(user)}>
+                  <Ban className="w-4 h-4 mr-1" />Block
+                </Button>
+              )}
+              {user.approval_status === 'blocked' && (
+                <Button size="sm" variant="outline" onClick={() => onUnblock(user)}>
+                  Unblock
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <Dialog open={rejectDialog} onOpenChange={setRejectDialog}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader><DialogTitle>Reject Application</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">Reject <strong>{user.full_name}</strong>'s application?</p>
+            <div>
+              <Label>Reason (optional)</Label>
+              <Textarea value={reason} onChange={e => setReason(e.target.value)} placeholder="Reason for rejection..." className="mt-1" />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setRejectDialog(false)}>Cancel</Button>
+              <Button variant="destructive" onClick={handleReject}>Confirm Reject</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}

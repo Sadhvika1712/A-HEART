@@ -1,0 +1,65 @@
+import React, { useState } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Star } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+export default function RatingDialog({ open, onClose, onSubmit, request }) {
+  const [rating, setRating] = useState(0);
+  const [hover, setHover] = useState(0);
+  const [feedback, setFeedback] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!rating) return;
+    setSubmitting(true);
+    await onSubmit(request, rating, feedback);
+    setSubmitting(false);
+    setRating(0);
+    setFeedback('');
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Rate Helper</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            How was your experience with <span className="font-medium text-foreground">{request?.assigned_helper_name}</span>?
+          </p>
+          <div className="flex justify-center gap-2">
+            {[1, 2, 3, 4, 5].map(i => (
+              <button
+                key={i}
+                onMouseEnter={() => setHover(i)}
+                onMouseLeave={() => setHover(0)}
+                onClick={() => setRating(i)}
+                className="p-1 transition-transform hover:scale-110"
+              >
+                <Star className={cn(
+                  "w-8 h-8 transition-colors",
+                  i <= (hover || rating) ? "fill-primary text-primary" : "text-border"
+                )} />
+              </button>
+            ))}
+          </div>
+          <Textarea 
+            value={feedback} 
+            onChange={e => setFeedback(e.target.value)} 
+            placeholder="Optional feedback..." 
+            className="h-20"
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={onClose}>Cancel</Button>
+            <Button onClick={handleSubmit} disabled={!rating || submitting}>
+              {submitting ? 'Submitting...' : 'Submit Rating'}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}

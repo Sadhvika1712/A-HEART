@@ -1,0 +1,64 @@
+{
+  "name": "Rating",
+  "type": "object",
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "description": "Related help request or resource borrow ID"
+    },
+    "rating_type": {
+      "type": "string",
+      "enum": [
+        "helper_rates_requester",
+        "requester_rates_helper",
+        "owner_rates_borrower",
+        "borrower_rates_owner"
+      ],
+      "description": "Direction of the rating"
+    },
+    "rater_email": {
+      "type": "string"
+    },
+    "rater_name": {
+      "type": "string"
+    },
+    "rated_email": {
+      "type": "string"
+    },
+    "rated_name": {
+      "type": "string"
+    },
+    "score": {
+      "type": "number",
+      "description": "1-5 star score"
+    },
+    "criteria": {
+      "type": "object",
+      "description": "Breakdown scores per criteria",
+      "properties": {
+        "timeliness": {
+          "type": "number"
+        },
+        "communication": {
+          "type": "number"
+        },
+        "quality": {
+          "type": "number"
+        },
+        "responsibility": {
+          "type": "number"
+        }
+      }
+    },
+    "feedback": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "request_id",
+    "rating_type",
+    "rater_email",
+    "rated_email",
+    "score"
+  ]
+}
